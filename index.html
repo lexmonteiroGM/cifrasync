@@ -1579,11 +1579,11 @@ body.presentation-mode .presentation-toggle{
     <input type="range" id="pb-volume" min="0" max="100" step="1" value="100">
   </div>
   <button class="pb-btn secondary on" id="btn-audio-toggle" title="Modo só acordes (silencia o MP3)">♪</button>
-  <div class="pb-field metro-lat-field" title="Adianta o clique do metrônomo para compensar atraso do celular">
+  <div class="pb-field metro-lat-field" title="Adianta o clique do metrônomo. + = clique mais cedo (para atraso alto). − = clique mais tarde. Botão direito = ±5ms. Duplo clique no valor = reset.">
     <span>🎯</span>
-    <button id="metro-lat-minus" title="−10ms">−</button>
-    <span id="metro-lat-value" style="min-width:32px;text-align:center;color:var(--fg);font-weight:700">0</span>
-    <button id="metro-lat-plus" title="+10ms">+</button>
+    <button id="metro-lat-minus" title="−10ms (botão direito: −5ms)">−</button>
+    <span id="metro-lat-value" style="min-width:36px;text-align:center;color:var(--fg);font-weight:700;cursor:pointer">0</span>
+    <button id="metro-lat-plus" title="+10ms (botão direito: +5ms)">+</button>
   </div>
   <div class="pb-field">
     <span>BPM</span>
@@ -7461,13 +7461,45 @@ function updateMetroLatDisplay() {
   const v = document.getElementById("metro-lat-value");
   if (v) v.textContent = P.metronomeLatencyMs || 0;
 }
-document.getElementById("metro-lat-plus")?.addEventListener("click", () => {
-  P.metronomeLatencyMs = Math.min(200, (P.metronomeLatencyMs || 0) + 10);
+function nudgeMetroLat(delta) {
+  P.metronomeLatencyMs = Math.max(-100, Math.min(200, (P.metronomeLatencyMs || 0) + delta));
   updateMetroLatDisplay();
   persistSongPrefs();
+}
+// Segurar o botão por 600ms acelera o ajuste (repete a cada 60ms)
+function attachHoldToNudge(btnId, delta) {
+  const btn = document.getElementById(btnId);
+  if (!btn) return;
+  let holdTimer = null;
+  let repeatTimer = null;
+  const start = () => {
+    holdTimer = setTimeout(() => {
+      repeatTimer = setInterval(() => nudgeMetroLat(delta), 60);
+    }, 600);
+  };
+  const stop = () => {
+    if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+    if (repeatTimer) { clearInterval(repeatTimer); repeatTimer = null; }
+  };
+  btn.addEventListener("pointerdown", start);
+  btn.addEventListener("pointerup", stop);
+  btn.addEventListener("pointerleave", stop);
+  btn.addEventListener("pointercancel", stop);
+}
+attachHoldToNudge("metro-lat-plus", +10);
+attachHoldToNudge("metro-lat-minus", -10);
+document.getElementById("metro-lat-plus")?.addEventListener("click", () => nudgeMetroLat(+10));
+document.getElementById("metro-lat-minus")?.addEventListener("click", () => nudgeMetroLat(-10));
+// Shift+clique para passos finos de 5ms
+document.getElementById("metro-lat-plus")?.addEventListener("contextmenu", (e) => {
+  e.preventDefault(); nudgeMetroLat(+5);
 });
-document.getElementById("metro-lat-minus")?.addEventListener("click", () => {
-  P.metronomeLatencyMs = Math.max(-50, (P.metronomeLatencyMs || 0) - 10);
+document.getElementById("metro-lat-minus")?.addEventListener("contextmenu", (e) => {
+  e.preventDefault(); nudgeMetroLat(-5);
+});
+// Duplo clique no valor reseta para 0
+document.getElementById("metro-lat-value")?.addEventListener("dblclick", () => {
+  P.metronomeLatencyMs = 0;
   updateMetroLatDisplay();
   persistSongPrefs();
 });
