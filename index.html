@@ -399,51 +399,68 @@ main{max-width:1100px;margin-inline:auto;padding:20px 20px calc(var(--player-h) 
   font-weight:700;
 }
 
-.offline-badge{
-  position:fixed;
-  top:12px;
-  left:50%;
-  transform:translateX(-50%);
+.topnav-badges{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.topnav-badge{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:4px 10px;
+  border-radius:99px;
+  font-family:var(--mono);
+  font-size:.72rem;
+  font-weight:700;
+  white-space:nowrap;
+  transition:.15s;
+}
+.topnav-badge--offline{
   background:#3a2d10;
   color:#ffe08a;
   border:1px solid #ffe08a;
-  padding:6px 14px;
-  border-radius:99px;
-  font-family:var(--mono);
-  font-size:.75rem;
-  font-weight:700;
-  z-index:180;
-  pointer-events:none;
-  box-shadow:0 4px 12px rgba(0,0,0,.5);
 }
-.sw-update-banner{
-  position:fixed;
-  bottom:calc(var(--player-h) + 16px);
-  left:50%;
-  transform:translateX(-50%) translateY(120%);
-  background:#1e2a38;
+.topnav-badge--update{
+  background:rgba(78,163,255,.12);
+  color:var(--accent);
   border:1px solid var(--accent);
-  border-radius:12px;
-  padding:12px 16px;
-  display:flex;
+  cursor:pointer;
+}
+.topnav-badge--update:hover{
+  background:var(--accent);
+  color:#001;
+}
+.topnav-badge--update .tb-x{
+  display:inline-flex;
   align-items:center;
-  gap:12px;
-  font-family:var(--mono);
-  font-size:.82rem;
-  color:var(--fg);
-  box-shadow:0 8px 32px rgba(0,0,0,.6);
-  z-index:190;
-  transition:transform .3s ease;
-  flex-wrap:wrap;
+  justify-content:center;
+  width:16px;
+  height:16px;
+  border-radius:50%;
+  background:transparent;
+  border:1px solid currentColor;
+  color:inherit;
+  font-size:.7rem;
+  line-height:1;
+  cursor:pointer;
+  margin-left:2px;
+  padding:0;
+  opacity:.7;
+  transition:.15s;
 }
-.sw-update-banner.show{
-  transform:translateX(-50%) translateY(0);
+.topnav-badge--update .tb-x:hover{
+  opacity:1;
+  background:rgba(0,0,0,.15);
 }
-.sw-update-banner span{flex:1;min-width:140px}
-.sw-update-banner button{
-  padding:6px 12px;
-  font-size:.8rem;
-  border-radius:6px;
+@media (max-width:700px){
+  .topnav-badge{padding:3px 8px;font-size:.68rem;gap:4px}
+  .topnav-badge--update .tb-x{width:14px;height:14px;font-size:.65rem}
+}
+@media (max-width:480px){
+  .topnav-badge--offline span.tb-label{display:none}
+  .topnav-badge--update span.tb-label{display:none}
 }
 
 .beat-flash{position:fixed;inset:0;pointer-events:none;z-index:200;background:transparent;transition:background .13s ease-out}
@@ -1235,6 +1252,7 @@ body.presentation-mode .presentation-toggle{
     <a href="#/import" data-nav="import">Importar</a>
   </div>
   <div class="nav-spacer"></div>
+  <div class="topnav-badges" id="topnav-badges"></div>
 </nav>
 
 <main>
@@ -1485,15 +1503,7 @@ body.presentation-mode .presentation-toggle{
 
 <div class="beat-flash" id="beat-flash"></div>
 
-<div class="offline-badge" id="offline-badge" style="display:none">
-  📴 Offline
-</div>
-
-<div class="sw-update-banner" id="sw-update-banner">
-  <span>✨ Nova versão disponível</span>
-  <button id="sw-update-btn">Atualizar agora</button>
-  <button id="sw-update-dismiss" class="ghost">Depois</button>
-</div>
+<!-- Badges e banner agora vivem dentro da topnav, na área .topnav-badges -->
 
 <button class="presentation-toggle" id="presentation-toggle" title="Modo apresentação (F)">🎭 Apresentação</button>
 
@@ -4724,32 +4734,55 @@ function initServiceWorker() {
 }
 
 function updateOfflineBadge() {
-  const el = document.getElementById("offline-badge");
-  if (!el) return;
+  const container = document.getElementById("topnav-badges");
+  if (!container) return;
+  const existing = container.querySelector(".topnav-badge--offline");
   if (navigator.onLine) {
-    el.style.display = "none";
+    if (existing) existing.remove();
   } else {
-    el.style.display = "flex";
-    el.textContent = "📴 Offline";
+    if (!existing) {
+      const el = document.createElement("div");
+      el.className = "topnav-badge topnav-badge--offline";
+      el.innerHTML = '📴 <span class="tb-label">Offline</span>';
+      el.title = "Sem conexão — app funciona normalmente";
+      container.appendChild(el);
+    }
   }
 }
 
 function showUpdateBanner() {
-  const el = document.getElementById("sw-update-banner");
-  if (!el) return;
-  el.classList.add("show");
+  const container = document.getElementById("topnav-badges");
+  if (!container) return;
+  if (container.querySelector(".topnav-badge--update")) return;  // já visível
+  const chip = document.createElement("div");
+  chip.className = "topnav-badge topnav-badge--update";
+  chip.title = "Nova versão disponível — clique para atualizar";
+  chip.innerHTML = `
+    <span class="tb-icon">✨</span>
+    <span class="tb-label">Atualizar</span>
+    <button class="tb-x" title="Deixar para depois">×</button>
+  `;
+  chip.querySelector(".tb-icon").addEventListener("click", applySWUpdate);
+  chip.querySelector(".tb-label").addEventListener("click", applySWUpdate);
+  chip.querySelector(".tb-x").addEventListener("click", (e) => {
+    e.stopPropagation();
+    chip.remove();
+  });
+  container.appendChild(chip);
 }
 
 function applySWUpdate() {
   if (_swWaiting) {
     _swWaiting.postMessage("skipWaiting");
   }
-  // Recarrega quando o novo SW assumir
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     window.location.reload();
   }, { once: true });
-  // Fallback: força reload em 500ms
   setTimeout(() => window.location.reload(), 500);
+}
+
+function dismissUpdateChip() {
+  document.querySelector(".topnav-badge--update")?.remove();
 }
 
 /* ============================================================
@@ -8339,10 +8372,6 @@ async function init() {
   const songs = await DB.getAll("songs");
   for (const s of songs) App.songs.set(s.id, s);
   App.setlists = LS.getSetlists();
-  document.getElementById("sw-update-btn")?.addEventListener("click", applySWUpdate);
-  document.getElementById("sw-update-dismiss")?.addEventListener("click", () => {
-    document.getElementById("sw-update-banner")?.classList.remove("show");
-  });
   initServiceWorker();
   initWizard();
   initLyricsEditor();
