@@ -4443,6 +4443,16 @@ const WakeLock = {
           this.lock = null;
           this.updateVisual();
           console.log("[CifraSync] Wake Lock liberado pelo sistema");
+          // Se ainda estamos tocando, o sistema liberou por algum motivo
+          // (troca de aba, economia de energia). Readquire em 200ms.
+          if (P.playing && this.requested) {
+            console.log("[CifraSync] Ainda tocando — readquirindo Wake Lock");
+            setTimeout(() => {
+              if (P.playing && this.requested && !this.lock && !this.canvasFallback) {
+                this.request();
+              }
+            }, 200);
+          }
         });
         this.updateVisual();
         return;
@@ -4568,8 +4578,13 @@ const WakeLock = {
 
   async refresh() {
     if (!this.requested || !P.playing) return;
+    // Sempre tenta readquirir se estiver tocando e sem lock/fallback
     if (!this.lock && !this.canvasFallback) {
       await this.request();
+      return;
+    }
+    // Se por algum motivo o lock foi perdido, também tenta de novo
+    if (!this.lock && this.canvasFallback) {
       return;
     }
     if (this.canvasFallback && this.canvasFallback.video) {
