@@ -241,6 +241,10 @@ main{max-width:1100px;margin-inline:auto;padding:20px 20px calc(var(--player-h) 
 .pb-btn.secondary{background:transparent;color:var(--accent);border:1px solid var(--border);
   width:36px;height:36px;font-size:.9rem}
 .pb-btn.secondary.on{background:var(--accent);color:#001;border-color:var(--accent)}
+#wake-indicator{cursor:default;pointer-events:auto}
+#wake-indicator.active{background:rgba(56,211,159,.15);border-color:var(--ok);color:var(--ok);opacity:1}
+#wake-indicator.fallback{background:rgba(255,180,84,.15);border-color:var(--warn);color:var(--warn);opacity:1}
+#wake-indicator.off{opacity:.4;color:var(--muted)}
 .pb-time{font-family:var(--mono);font-size:.78rem;color:var(--muted);min-width:100px;text-align:center;flex-shrink:0}
 .pb-seek{flex:1;min-width:80px;height:6px;background:#20262e;border-radius:3px;
   position:relative;cursor:pointer;user-select:none}
@@ -1580,6 +1584,7 @@ body.presentation-mode .presentation-toggle{
     <input type="number" id="pb-bpm" min="40" max="240" step="1" value="130">
   </div>
   <button class="pb-btn secondary on" id="btn-metro">♩</button>
+  <button class="pb-btn secondary" id="wake-indicator" title="Estado da tela (Wake Lock)" style="cursor:default;opacity:.5">🔓</button>
   <button class="pb-btn secondary" id="btn-metro-div" title="Metrônomo em meio tempo">½</button>
   <button class="pb-exit" id="btn-exit-presentation" title="Sair do modo apresentação (ESC)">
     <span class="pb-exit__icon">✕</span>
@@ -4396,6 +4401,32 @@ function initChordPicker() {
    Wake Lock — mantém a tela acesa durante a reprodução
    ============================================================ */
 const WakeLock = {
+  updateVisual() {
+    const el = document.getElementById("wake-indicator");
+    if (!el) return;
+    el.classList.remove("active", "fallback", "off");
+    if (this.lock) {
+      el.textContent = "🔒";
+      el.classList.add("active");
+      el.title = "Tela travada ligada (Wake Lock ativo)";
+    } else if (this.canvasFallback) {
+      el.textContent = "🔒";
+      el.classList.add("fallback");
+      el.title = "Tela acesa via fallback de vídeo";
+    } else if (!this.supported) {
+      el.textContent = "🔓";
+      el.classList.add("off");
+      el.title = "Wake Lock não suportado neste navegador (precisa HTTPS)";
+    } else if (!this.requested) {
+      el.textContent = "🔓";
+      el.classList.add("off");
+      el.title = "Tela pode desligar (Wake Lock inativo)";
+    } else {
+      el.textContent = "⏸";
+      el.classList.add("off");
+      el.title = "Wake Lock solicitado mas não confirmado";
+    }
+  },
   lock: null,
   supported: (typeof navigator !== "undefined" && "wakeLock" in navigator),
   requested: false,
@@ -4403,6 +4434,25 @@ const WakeLock = {
   async request() {
     if (this.lock || this.canvasFallback) return;
     this.requested = true;
+
+    if (this.supported) {
+      try {
+        this.lock = await navigator.wakeLock.request("screen");
+        console.log("[CifraSync] Wake Lock ativo — tela não vai apagar");
+        this.lock.addEventListener("release", () => {
+          this.lock = null;
+          this.updateVisual();
+          console.log("[CifraSync] Wake Lock liberado pelo sistema");
+        });
+        this.updateVisual();
+        return;
+      } catch (err) {
+        console.warn("[CifraSync] Wake Lock API falhou:", err.name, "|", err.message);
+        this.lock = null;
+      }
+    } else {
+      console.warn("[CifraSync] Wake Lock não suportado neste contexto");
+    }
 
     // Tentativa 1: Wake Lock API (só funciona em HTTPS)
     if (this.supported) {
@@ -4458,6 +4508,7 @@ const WakeLock = {
       });
 
       this.canvasFallback = { canvas, video, stream };
+      this.updateVisual();
       console.log("[CifraSync] Fallback de tela acesa ativo (vídeo mudo 2x2)");
     } catch (e) {
       console.warn("[CifraSync] Fallback de vídeo indisponível:", e.message);
@@ -4512,6 +4563,7 @@ const WakeLock = {
       this.canvasFallback = null;
       console.log("[CifraSync] Fallback de tela acesa liberado");
     }
+    this.updateVisual();
   },
 
   async refresh() {
@@ -8067,6 +8119,15 @@ async function init() {
   initShapePopover();
   initInstrumentToggle();
   initPresentationMode();
+  WakeLock.updateVisual();
+  // Se o usuário clicar no indicador, mostra detalhes no console
+  document.getElementById("wake-indicator")?.addEventListener("click", () => {
+    console.log("[CifraSync] Wake Lock status:",
+      "supported=" + WakeLock.supported,
+      "| requested=" + WakeLock.requested,
+      "| lock=" + (WakeLock.lock ? "ativo" : "nulo"),
+      "| fallback=" + (WakeLock.canvasFallback ? "ativo" : "nulo"));
+  });
   route();
 }
 init();
