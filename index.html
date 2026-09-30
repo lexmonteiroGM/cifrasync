@@ -1579,6 +1579,12 @@ body.presentation-mode .presentation-toggle{
     <input type="range" id="pb-volume" min="0" max="100" step="1" value="100">
   </div>
   <button class="pb-btn secondary on" id="btn-audio-toggle" title="Modo só acordes (silencia o MP3)">♪</button>
+  <div class="pb-field metro-lat-field" title="Adianta o clique do metrônomo para compensar atraso do celular">
+    <span>🎯</span>
+    <button id="metro-lat-minus" title="−10ms">−</button>
+    <span id="metro-lat-value" style="min-width:32px;text-align:center;color:var(--fg);font-weight:700">0</span>
+    <button id="metro-lat-plus" title="+10ms">+</button>
+  </div>
   <div class="pb-field">
     <span>BPM</span>
     <input type="number" id="pb-bpm" min="40" max="240" step="1" value="130">
@@ -1893,6 +1899,7 @@ const P = {
   hiddenChords: {}, chordNameOverrides: {}, edZoom: 1, preferredShapes: {},
   manualAnchor: false,
   instrument: "guitar", bassPositionIdx: 0,
+  metronomeLatencyMs: null,
   addedChords: {}, nextAddedIdx: -1,
   metronomeDivisor: 1,
   musicStartT: null,
@@ -6266,6 +6273,9 @@ function updateOverrideCount() {
 }
 
 /* ============ Metronome ============ */
+const IS_MOBILE = (typeof navigator !== "undefined") &&
+  /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+
 function ensureAudioCtx() {
   if (P.audioCtx) return P.audioCtx;
   const Ctx = window.AudioContext || window.webkitAudioContext;
@@ -6296,7 +6306,9 @@ function ensureAudioCtx() {
 function scheduleClick(accent, when) {
   const ctx = P.audioCtx;
   // Compensa a latência de saída: agenda um pouco mais cedo
-  const lat = P.audioOutputLatency || 0;
+  const baseLat = P.audioOutputLatency || 0;
+  const extraMs = P.metronomeLatencyMs || 0;
+  const lat = baseLat + (extraMs / 1000);
   const compensated = Math.max(ctx.currentTime + 0.001, when - lat);
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -6398,6 +6410,11 @@ function updateAudioVolume() {
 function playerPlay() {
   if (!P.model) return;
   ensureAudioCtx().resume();
+  // Wake Lock precisa ser solicitado DENTRO do gesto do usuário.
+  // Fazemos aqui antes de qualquer setTimeout (count-in).
+  if (!P.playing && !WakeLock.lock && !WakeLock.canvasFallback) {
+    WakeLock.request();
+  }
   const atStart = P.songTime < 0.5;
   if (atStart && !P.countingIn) { startCountIn(); return; }
   actuallyStartPlayback(false);
@@ -7212,6 +7229,13 @@ async function openPlayer(songId, queue = null, queueIdx = -1) {
   P.instrument = prefs.instrument || "guitar";
   P.bassPositionIdx = prefs.bassPositionIdx || 0;
   P.metronomeDivisor = prefs.metronomeDivisor || 1;
+  P.metronomeLatencyMs = (typeof prefs.metronomeLatencyMs === "number")
+    ? prefs.metronomeLatencyMs
+    : (IS_MOBILE ? 40 : 0);
+  requestAnimationFrame(() => {
+    const v = document.getElementById("metro-lat-value");
+    if (v) v.textContent = P.metronomeLatencyMs;
+  });
   P.musicStartT = (prefs.musicStartT != null && prefs.musicStartT > 0) ? prefs.musicStartT : null;
   P.musicStartBeatIdx = (prefs.musicStartBeatIdx != null && prefs.musicStartBeatIdx >= 0)
     ? prefs.musicStartBeatIdx
@@ -7433,6 +7457,21 @@ document.getElementById("btn-metro").addEventListener("click", e => {
   P.metronomeOn = !P.metronomeOn;
   e.currentTarget.classList.toggle("on", P.metronomeOn);
 });
+function updateMetroLatDisplay() {
+  const v = document.getElementById("metro-lat-value");
+  if (v) v.textContent = P.metronomeLatencyMs || 0;
+}
+document.getElementById("metro-lat-plus")?.addEventListener("click", () => {
+  P.metronomeLatencyMs = Math.min(200, (P.metronomeLatencyMs || 0) + 10);
+  updateMetroLatDisplay();
+  persistSongPrefs();
+});
+document.getElementById("metro-lat-minus")?.addEventListener("click", () => {
+  P.metronomeLatencyMs = Math.max(-50, (P.metronomeLatencyMs || 0) - 10);
+  updateMetroLatDisplay();
+  persistSongPrefs();
+});
+
 document.getElementById("btn-metro-div").addEventListener("click", e => {
   P.metronomeDivisor = (P.metronomeDivisor === 2) ? 1 : 2;
   e.currentTarget.classList.toggle("on", P.metronomeDivisor === 2);
@@ -7603,6 +7642,7 @@ function persistSongPrefs() {
   prefs.instrument = P.instrument || "guitar";
   prefs.bassPositionIdx = P.bassPositionIdx || 0;
   prefs.metronomeDivisor = P.metronomeDivisor || 1;
+  prefs.metronomeLatencyMs = P.metronomeLatencyMs || 0;
   // Serializa acordes adicionados (sem referências DOM)
   prefs.addedChords = {};
   for (const [k, c] of Object.entries(P.addedChords || {})) {
