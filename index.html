@@ -399,6 +399,53 @@ main{max-width:1100px;margin-inline:auto;padding:20px 20px calc(var(--player-h) 
   font-weight:700;
 }
 
+.offline-badge{
+  position:fixed;
+  top:12px;
+  left:50%;
+  transform:translateX(-50%);
+  background:#3a2d10;
+  color:#ffe08a;
+  border:1px solid #ffe08a;
+  padding:6px 14px;
+  border-radius:99px;
+  font-family:var(--mono);
+  font-size:.75rem;
+  font-weight:700;
+  z-index:180;
+  pointer-events:none;
+  box-shadow:0 4px 12px rgba(0,0,0,.5);
+}
+.sw-update-banner{
+  position:fixed;
+  bottom:calc(var(--player-h) + 16px);
+  left:50%;
+  transform:translateX(-50%) translateY(120%);
+  background:#1e2a38;
+  border:1px solid var(--accent);
+  border-radius:12px;
+  padding:12px 16px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  font-family:var(--mono);
+  font-size:.82rem;
+  color:var(--fg);
+  box-shadow:0 8px 32px rgba(0,0,0,.6);
+  z-index:190;
+  transition:transform .3s ease;
+  flex-wrap:wrap;
+}
+.sw-update-banner.show{
+  transform:translateX(-50%) translateY(0);
+}
+.sw-update-banner span{flex:1;min-width:140px}
+.sw-update-banner button{
+  padding:6px 12px;
+  font-size:.8rem;
+  border-radius:6px;
+}
+
 .beat-flash{position:fixed;inset:0;pointer-events:none;z-index:200;background:transparent;transition:background .13s ease-out}
 .beat-flash.flash-yellow{background:rgba(255,224,138,.20)}
 .beat-flash.flash-red{background:rgba(255,107,107,.28)}
@@ -1437,6 +1484,16 @@ body.presentation-mode .presentation-toggle{
 </main>
 
 <div class="beat-flash" id="beat-flash"></div>
+
+<div class="offline-badge" id="offline-badge" style="display:none">
+  📴 Offline
+</div>
+
+<div class="sw-update-banner" id="sw-update-banner">
+  <span>✨ Nova versão disponível</span>
+  <button id="sw-update-btn">Atualizar agora</button>
+  <button id="sw-update-dismiss" class="ghost">Depois</button>
+</div>
 
 <button class="presentation-toggle" id="presentation-toggle" title="Modo apresentação (F)">🎭 Apresentação</button>
 
@@ -4612,6 +4669,88 @@ document.addEventListener("visibilitychange", () => {
 // Também ao ganhar foco (alguns Androids disparam focus em vez de visibilitychange)
 window.addEventListener("focus", () => WakeLock.refresh());
 window.addEventListener("pageshow", () => WakeLock.refresh());
+
+/* ============================================================
+   Service Worker — offline
+   ============================================================ */
+let _swRegistration = null;
+let _swWaiting = null;
+
+function initServiceWorker() {
+  if (!("serviceWorker" in navigator)) {
+    console.log("[CifraSync] Service Worker não suportado");
+    return;
+  }
+  // Só registra em HTTPS (GitHub Pages) ou localhost
+  if (location.protocol !== "https:" && location.hostname !== "localhost") {
+    console.log("[CifraSync] Service Worker requer HTTPS — offline não disponível");
+    updateOfflineBadge();
+    return;
+  }
+
+  navigator.serviceWorker
+    .register("./sw.js")
+    .then((reg) => {
+      _swRegistration = reg;
+      console.log("[CifraSync] Service Worker registrado:", reg.scope);
+      updateOfflineBadge();
+
+      // Atualização disponível
+      reg.addEventListener("updatefound", () => {
+        const newWorker = reg.installing;
+        newWorker.addEventListener("statechange", () => {
+          if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+            _swWaiting = newWorker;
+            showUpdateBanner();
+          }
+        });
+      });
+
+      // Se já existe um waiting, mostra banner direto
+      if (reg.waiting && navigator.serviceWorker.controller) {
+        _swWaiting = reg.waiting;
+        showUpdateBanner();
+      }
+    })
+    .catch((err) => {
+      console.warn("[CifraSync] SW falhou:", err.message);
+      updateOfflineBadge();
+    });
+
+  // Status online/offline
+  window.addEventListener("online", updateOfflineBadge);
+  window.addEventListener("offline", updateOfflineBadge);
+  updateOfflineBadge();
+}
+
+function updateOfflineBadge() {
+  const el = document.getElementById("offline-badge");
+  if (!el) return;
+  if (navigator.onLine) {
+    el.style.display = "none";
+  } else {
+    el.style.display = "flex";
+    el.textContent = "📴 Offline";
+  }
+}
+
+function showUpdateBanner() {
+  const el = document.getElementById("sw-update-banner");
+  if (!el) return;
+  el.classList.add("show");
+}
+
+function applySWUpdate() {
+  if (_swWaiting) {
+    _swWaiting.postMessage("skipWaiting");
+  }
+  // Recarrega quando o novo SW assumir
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    window.location.reload();
+  }, { once: true });
+  // Fallback: força reload em 500ms
+  setTimeout(() => window.location.reload(), 500);
+}
 
 /* ============================================================
    ZIP (zero-dependency)
@@ -8200,6 +8339,11 @@ async function init() {
   const songs = await DB.getAll("songs");
   for (const s of songs) App.songs.set(s.id, s);
   App.setlists = LS.getSetlists();
+  document.getElementById("sw-update-btn")?.addEventListener("click", applySWUpdate);
+  document.getElementById("sw-update-dismiss")?.addEventListener("click", () => {
+    document.getElementById("sw-update-banner")?.classList.remove("show");
+  });
+  initServiceWorker();
   initWizard();
   initLyricsEditor();
   initChordPicker();
