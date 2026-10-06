@@ -463,6 +463,28 @@ main{max-width:1100px;margin-inline:auto;padding:20px 20px calc(var(--player-h) 
   .topnav-badge--update span.tb-label{display:none}
 }
 
+.se-audio-tag{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  padding:3px 10px;
+  border-radius:99px;
+  font-family:var(--mono);
+  font-size:.7rem;
+  font-weight:700;
+  white-space:nowrap;
+}
+.se-audio-tag--official{
+  background:rgba(56,211,159,.12);
+  color:var(--ok);
+  border:1px solid var(--ok);
+}
+.se-audio-tag--temp{
+  background:rgba(255,180,84,.12);
+  color:var(--warn);
+  border:1px solid var(--warn);
+}
+
 .beat-flash{position:fixed;inset:0;pointer-events:none;z-index:200;background:transparent;transition:background .13s ease-out}
 .beat-flash.flash-yellow{background:rgba(255,224,138,.20)}
 .beat-flash.flash-red{background:rgba(255,107,107,.28)}
@@ -1561,6 +1583,7 @@ body.presentation-mode .presentation-toggle{
       <div class="se-audio-row">
         <button class="pb-btn secondary" id="lyr-play" title="Play/Pause">▶</button>
         <button class="ghost small" id="lyr-change-audio" title="Trocar o áudio de referência">🎵 Trocar</button>
+        <span class="se-audio-tag se-audio-tag--official" id="lyr-audio-tag" title="Áudio usado no player principal">✓ oficial</span>
         <div class="se-seek" id="lyr-seek">
           <div class="se-seek__fill" id="lyr-seek-fill"></div>
           <div class="se-seek__mark" id="lyr-seek-mark"></div>
@@ -4989,6 +5012,8 @@ const LyricsEditor = {
   audio: null, raf: 0, loopIdx: -1, active: false,
   originalText: "",
   currentSongId: null,
+  currentBlob: null,
+  pendingAudioFile: null,
 };
 
 async function openLyricsEditor() {
@@ -5349,6 +5374,97 @@ function updateMarkInfo() {
   }
 }
 
+async function saveAsOfficialAudio(file) {
+  if (!file || !LyricsEditor.currentSongId) return;
+  const songId = LyricsEditor.currentSongId;
+  const song = App.songs.get(songId);
+  if (!song) return;
+
+  try {
+    // Salva o blob no IndexedDB
+    await DB.put("audio", { songId, blob: file });
+
+    // Marca a música como tendo áudio
+    song.hasAudio = true;
+    song.updatedAt = Date.now();
+    await DB.put("songs", song);
+    App.songs.set(songId, song);
+
+    console.log("[CifraSync] Áudio oficial atualizado:", file.name,
+      `(${(file.size/1024/1024).toFixed(2)} MB)`);
+
+    updateLyricsAudioTag("official");
+
+    // Se o player principal está com essa música aberta, atualiza o áudio lá também
+    if (P.songId === songId) {
+      await reloadMainPlayerAudio(file);
+    }
+
+    // Atualiza a biblioteca para refletir o novo estado
+    if (document.querySelector("#view-library.view.active")) {
+      renderLibrary();
+    }
+  } catch (err) {
+    console.error("[CifraSync] Erro ao salvar áudio oficial:", err);
+    alert("Erro ao salvar áudio oficial: " + err.message);
+    updateLyricsAudioTag("temp");
+  }
+}
+
+async function reloadMainPlayerAudio(file) {
+  // Guarda a posição atual para retomar depois
+  const wasPlaying = P.playing;
+  const currentSongTime = P.songTime;
+
+  // Usa data URL para compatibilidade com file://
+  const dataUrl = await new Promise((resolve) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => resolve(null);
+    r.readAsDataURL(file);
+  });
+  if (!dataUrl) return;
+
+  // Limpa a URL antiga se houver
+  if (audioEl.dataset.objectUrl) {
+    try { URL.revokeObjectURL(audioEl.dataset.objectUrl); } catch {}
+    delete audioEl.dataset.objectUrl;
+  }
+
+  audioEl.pause();
+  audioEl.src = dataUrl;
+  audioEl.load();
+
+  // Aguarda o metadata carregar para retomar a posição
+  const onLoaded = () => {
+    try {
+      audioEl.currentTime = Math.max(0, currentSongTime + P.audioOffset);
+    } catch {}
+    if (wasPlaying) {
+      audioEl.play().catch(() => {});
+    }
+    audioEl.removeEventListener("loadedmetadata", onLoaded);
+  };
+  audioEl.addEventListener("loadedmetadata", onLoaded);
+
+  console.log("[CifraSync] Player principal atualizado com novo áudio");
+}
+
+function updateLyricsAudioTag(state) {
+  const el = document.getElementById("lyr-audio-tag");
+  if (!el) return;
+  el.classList.remove("se-audio-tag--official", "se-audio-tag--temp");
+  if (state === "temp") {
+    el.classList.add("se-audio-tag--temp");
+    el.textContent = "⏱ temporário";
+    el.title = "Este áudio é usado apenas no editor. O player principal continua com o áudio original.";
+  } else {
+    el.classList.add("se-audio-tag--official");
+    el.textContent = "✓ oficial";
+    el.title = "Áudio usado no player principal.";
+  }
+}
+
 function updateLyricsStatus() {
   const ta = document.getElementById("lyr-ta");
   const el = document.getElementById("lyr-status");
@@ -5601,14 +5717,34 @@ function initLyricsEditor() {
           r.readAsDataURL(file);
         });
         if (!dataUrl) { alert("Não foi possível carregar o áudio."); return; }
+
         audio.pause();
         audio.src = dataUrl;
         audio.load();
         LyricsEditor.currentBlob = file;
+        LyricsEditor.pendingAudioFile = file;
         _wfCache = null;
-        console.log("[CifraSync] Áudio do editor trocado:", file.name,
-          `(${(file.size/1024/1024).toFixed(2)} MB)`);
         setTimeout(() => renderWaveformAndGrid(), 500);
+        console.log("[CifraSync] Áudio carregado no editor:", file.name,
+          `(${(file.size/1024/1024).toFixed(2)} MB)`);
+
+        // Pergunta se quer salvar como oficial
+        const choice = await pickerModal({
+          title: "Como usar este áudio?",
+          items: [
+            { id: "official", label: "✓ Salvar como áudio oficial (player principal passa a usar este)" },
+            { id: "temp", label: "⏱ Usar apenas no editor (não altera o player principal)" },
+          ],
+          okLabel: "Confirmar",
+        });
+
+        if (!choice) return;
+
+        if (choice.id === "official") {
+          await saveAsOfficialAudio(file);
+        } else {
+          updateLyricsAudioTag("temp");
+        }
       };
       input.click();
     });
@@ -5838,6 +5974,9 @@ if (_lyrMarkStartEl) _lyrMarkStartEl.addEventListener("click", () => {
     }
   });
 
+  // Reseta tag de estado do áudio
+  LyricsEditor.pendingAudioFile = null;
+  updateLyricsAudioTag("official");
   // Exibe o marcador ao abrir
   updateMarkInfo();
   // (waveform removido — usando o grid do editor de alinhamento)

@@ -45,7 +45,7 @@ Abra **https://lexmonteirogm.github.io/cifrasync/** no Chrome, Edge ou Firefox.
 
 O app fica com ícone próprio, abre em tela cheia, e funciona como um aplicativo nativo.
 
-> \*\*Importante:\*\* cada dispositivo tem sua própria biblioteca. Músicas e áudios \*\*não são sincronizados\*\* entre aparelhos. Use a \[exportação de backup](#backup-e-portabilidade) para transferir.
+> \\\*\\\*Importante:\\\*\\\* cada dispositivo tem sua própria biblioteca. Músicas e áudios \\\*\\\*não são sincronizados\\\*\\\* entre aparelhos. Use a \\\[exportação de backup](#backup-e-portabilidade) para transferir.
 
 \---
 
@@ -91,15 +91,15 @@ Você precisa de:
 
 |---|---|---|
 
-| `song\_beats.txt` | ✅ | Marca o tempo das batidas |
+| `song\\\_beats.txt` | ✅ | Marca o tempo das batidas |
 
-| `song\_chords.txt` | ✅ | Acordes com início e fim |
+| `song\\\_chords.txt` | ✅ | Acordes com início e fim |
 
-| `song\_keys.txt` | ✅ | Tonalidades da música |
+| `song\\\_keys.txt` | ✅ | Tonalidades da música |
 
-| `song\_structures.txt` | ✅ | Seções (intro, verso, refrão...) |
+| `song\\\_structures.txt` | ✅ | Seções (intro, verso, refrão...) |
 
-| Letra (`.txt`) | ✅ | Texto da música com tags `\[Verse]` etc. |
+| Letra (`.txt`) | ✅ | Texto da música com tags `\\\[Verse]` etc. |
 
 | Áudio (`.mp3`) | Opcional | A música em si |
 
@@ -139,13 +139,13 @@ Mais um verso...
 
 
 
-\- Use `\[Nome da seção]` para marcar cada bloco
+\- Use `\\\[Nome da seção]` para marcar cada bloco
 
 \- Deixe uma linha em branco entre blocos
 
-\- Seções instrumentais podem ficar vazias (`\[Intro]` sozinho)
+\- Seções instrumentais podem ficar vazias (`\\\[Intro]` sozinho)
 
-\- \*\*Não coloque acordes\*\* no arquivo de letra — eles vêm do `song\_chords.txt`
+\- \*\*Não coloque acordes\*\* no arquivo de letra — eles vêm do `song\\\_chords.txt`
 
 
 
@@ -183,7 +183,7 @@ Se sua letra já vem bem marcada, pode passar direto.
 
 
 
-O app cruza os blocos da letra com as seções detectadas no áudio. Se o mapeamento automático errar (por exemplo, um `\[Bridge]` que virou verso), você pode corrigir manualmente em cada linha.
+O app cruza os blocos da letra com as seções detectadas no áudio. Se o mapeamento automático errar (por exemplo, um `\\\[Bridge]` que virou verso), você pode corrigir manualmente em cada linha.
 
 
 
@@ -207,7 +207,7 @@ Um detalhe importante para o mapeamento funcionar bem: \*\*a análise de estrutu
 
 
 
-Se o `song\_structures.txt` diz que existem 3 versos, 2 refrãos e 1 intro, seu arquivo de letra deve refletir a mesma ordem. Caso contrário, o app tenta mapear do melhor jeito possível, mas o resultado pode exigir ajuste manual.
+Se o `song\\\_structures.txt` diz que existem 3 versos, 2 refrãos e 1 intro, seu arquivo de letra deve refletir a mesma ordem. Caso contrário, o app tenta mapear do melhor jeito possível, mas o resultado pode exigir ajuste manual.
 
 
 
@@ -238,6 +238,7 @@ Ao abrir uma música da Biblioteca, você vê:
 
 
 No topo, uma faixa mostra três acordes:
+
 
 
 \- O acorde do \*\*centro\*\* é o que está tocando agora, em destaque ciano
@@ -311,6 +312,7 @@ Na barra inferior:
 Ao apertar \*\*play\*\* no início da música, a tela pisca \*\*8 vezes\*\* antes da música começar:
 
 
+
 🟡 🟡 🟡 🔴 🟡 🟡 🟡 🟢
 
 
@@ -331,7 +333,7 @@ O count-in respeita o \*\*marcador de início\*\* definido no editor de alinhame
 
 
 
-O metrônomo segue o \*\*`song\_beats.txt`\*\* com precisão de milissegundos. Ele continua tocando mesmo com a música pausada — útil para estudar.
+O metrônomo segue o \*\*`song\\\_beats.txt`\*\* com precisão de milissegundos. Ele continua tocando mesmo com a música pausada — útil para estudar.
 
 
 
@@ -483,7 +485,7 @@ Você pode:
 
 
 
-\- \*\*Mover tags\*\* `\[Verse]`, `\[Chorus]` etc. para o lugar certo
+\- \*\*Mover tags\*\* `\\\[Verse]`, `\\\[Chorus]` etc. para o lugar certo
 
 \- \*\*Adicionar novas tags\*\* clicando no \*\*+\*\* de um chip
 
@@ -602,6 +604,7 @@ Cada escolha recentra o braço na região correspondente. É a adaptação do CA
 No cabeçalho de cada música:
 
 Tom: \[−] +2 \[+]
+
 
 
 
@@ -964,7 +967,7 @@ Você pode usar só o metrônomo. Importe os 4 arquivos de análise e a letra, d
 
 
 
-Não automaticamente — o formato de análise é diferente. Você precisa do `song\_beats.txt`, `song\_chords.txt`, etc. gerados pelo SheetSage2.
+Não automaticamente — o formato de análise é diferente. Você precisa do `song\\\_beats.txt`, `song\\\_chords.txt`, etc. gerados pelo SheetSage2.
 
 
 
@@ -997,11 +1000,4 @@ Desenvolvido para músicos que querem uma ferramenta simples, portátil e offlin
 
 
 Zero dependências externas — funciona em qualquer navegador moderno sem instalar nada.
-
-
-
-
-
-
-
 
